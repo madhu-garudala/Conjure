@@ -1,0 +1,98 @@
+# Conjure on the workshop cluster: code from ConfigMap conjure-code, credentials from Secret conjure-creds.
+# Apply with: sed "s/__APP_HOST__/$APP_HOST/" deploy/conjure.yaml | kubectl -n "$NS" apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conjure
+  labels: {app: conjure}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: conjure}
+  template:
+    metadata:
+      labels: {app: conjure}
+    spec:
+      containers:
+      - name: app
+        image: python:3.12-slim
+        imagePullPolicy: IfNotPresent
+        workingDir: /code
+        command: ["bash", "-c"]
+        args:
+        - |
+          set -euo pipefail
+          pip install -q --cache-dir /data/pip-cache -r requirements.txt
+          exec python main.py
+        ports:
+        - containerPort: 8080
+        env:
+        - {name: PORT, value: "8080"}
+        - {name: CONJURE_DATA, value: /data}
+        - {name: PYTHONUNBUFFERED, value: "1"}
+        - {name: WEAVE_PRINT_CALL_LINK, value: "false"}
+        - {name: VSS_URL, valueFrom: {secretKeyRef: {name: conjure-creds, key: VSS_URL}}}
+        - {name: VSS_USERNAME, valueFrom: {secretKeyRef: {name: conjure-creds, key: VSS_USERNAME}}}
+        - {name: VSS_PASSWORD, valueFrom: {secretKeyRef: {name: conjure-creds, key: VSS_PASSWORD}}}
+        - {name: GPU_BEARER_TOKEN, valueFrom: {secretKeyRef: {name: conjure-creds, key: GPU_BEARER_TOKEN}}}
+        - {name: COSMOS3_REASON_URL, valueFrom: {secretKeyRef: {name: conjure-creds, key: COSMOS3_REASON_URL}}}
+        - {name: YOLO_URL, valueFrom: {secretKeyRef: {name: conjure-creds, key: YOLO_URL}}}
+        - {name: WANDB_API_KEY, valueFrom: {secretKeyRef: {name: conjure-creds, key: WANDB_API_KEY}}}
+        - {name: WANDB_TEAM, valueFrom: {secretKeyRef: {name: conjure-creds, key: WANDB_TEAM}}}
+        - {name: WANDB_PROJECT, valueFrom: {secretKeyRef: {name: conjure-creds, key: WANDB_PROJECT}}}
+        - {name: CONJURE_SIGNING_KEY, valueFrom: {secretKeyRef: {name: conjure-creds, key: CONJURE_SIGNING_KEY}}}
+        resources:
+          requests: {cpu: "2", memory: 2Gi}
+          limits: {cpu: "6", memory: 8Gi}
+        readinessProbe:
+          httpGet: {path: /health, port: 8080}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 60
+        livenessProbe:
+          httpGet: {path: /health, port: 8080}
+          initialDelaySeconds: 240
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 8
+        volumeMounts:
+        - {name: code, mountPath: /code}
+        - {name: data, mountPath: /data}
+      volumes:
+      - name: code
+        configMap: {name: conjure-code}
+      - name: data
+        emptyDir: {sizeLimit: 12Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conjure
+  labels: {app: conjure}
+spec:
+  selector: {app: conjure}
+  ports:
+  - {name: http, port: 80, targetPort: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: conjure
+  labels: {app: conjure}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: 80m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: __APP_HOST__
+    http:
+      paths:
+      - path: /app(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: conjure
+            port: {number: 80}

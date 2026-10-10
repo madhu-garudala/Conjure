@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conjure — auditable AI video editing</title>
+<script>document.write('<base href="' + location.pathname.replace(/\/?$/, "/") + '">');</script>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">✦</span> Conjure <span class="tag">Conjure it in. Conjure it away. Conjure it up.</span></div>
+  <div class="statement">Conjure never silently alters footage. Every output carries a verifiable record of what was changed.</div>
+</header>
+
+<main>
+  <aside id="left">
+    <nav class="tabs" data-group="left">
+      <button data-tab="clips" class="active">Clips</button>
+      <button data-tab="search">Search</button>
+      <button data-tab="library">Library</button>
+    </nav>
+    <section data-panel="clips" class="panel active">
+      <div id="clipList"></div>
+      <label class="upload">Upload your own clip (5–15 s MP4)
+        <input type="file" id="uploadInput" accept="video/mp4,video/quicktime,video/webm">
+      </label>
+      <p class="hint">Clips come from the team's VAST-indexed archive (NYC street cameras). No internet video is ingested.</p>
+    </section>
+    <section data-panel="search" class="panel">
+      <form id="searchForm">
+        <input id="searchQuery" placeholder='Find objects, e.g. "person in yellow vest"' autocomplete="off">
+        <div class="row">
+          <select id="searchCamera">
+            <option value="">All cameras</option>
+            <option>nyc_streets_cam-1</option><option>nyc_streets_cam-2</option>
+            <option>i24_cam-1</option><option>pie_cam-3</option>
+          </select>
+          <input id="searchClass" placeholder="YOLO class filter (optional)">
+        </div>
+        <button type="submit">Search archive</button>
+      </form>
+      <div class="chips" id="searchChips"></div>
+      <div id="searchResults"></div>
+    </section>
+    <section data-panel="library" class="panel">
+      <p class="hint">Objects Conjure can insert. Props are drawn procedurally; people and vehicles are real cutouts harvested from the indexed footage. Pick one, then click in the video to place it.</p>
+      <div id="spriteGrid"></div>
+    </section>
+  </aside>
+
+  <section id="center">
+    <div id="empty" class="empty">Loading clips from the archive…</div>
+    <div id="editor" hidden>
+      <div class="clipbar">
+        <div><b id="clipTitle"></b> <span id="clipMeta" class="muted"></span></div>
+        <div class="modes">
+          <button data-mode="slider" class="active">Before / after slider</button>
+          <button data-mode="sbs">Side by side</button>
+          <button data-mode="edited">Edited only</button>
+        </div>
+      </div>
+      <div id="viewer" class="viewer slider">
+        <div class="pane before"><video id="vBefore" muted playsinline loop preload="auto"></video><span class="lbl" id="lblBefore">Original</span></div>
+        <div class="pane after"><video id="vAfter" muted playsinline loop preload="auto"></video><span class="lbl" id="lblAfter">Edited</span><canvas id="overlay"></canvas></div>
+        <input type="range" id="split" min="0" max="100" value="50">
+        <div id="splitLine"></div>
+        <div id="popover" hidden></div>
+      </div>
+      <div class="transport">
+        <button id="playBtn">▶</button>
+        <input type="range" id="scrub" min="0" max="1000" value="0">
+        <span id="timeLbl" class="mono">0.00s · f0</span>
+        <label><input type="checkbox" id="showBoxes" checked> detections</label>
+      </div>
+      <form id="cmdForm" class="command">
+        <input id="cmdInput" placeholder='Describe your edit — "remove the person on the left", "replace the truck with a bus", "add a traffic cone on the right"' autocomplete="off">
+        <button type="submit" class="primary">Conjure</button>
+      </form>
+      <div class="toolbar">
+        <div class="chips" id="cmdChips"></div>
+        <div class="tools">
+          <span id="addMode" class="muted"></span>
+          <button id="anonBtn" title="Blur every face and license plate zone, tracked through the clip">One-click anonymize</button>
+          <label title="Burn a small 'Edited with Conjure' mark into the output"><input type="checkbox" id="wmToggle" checked> watermark</label>
+        </div>
+      </div>
+      <p class="hint">Or click any boxed object in the video to remove, blur or replace it. Edits use the moment you are paused on.</p>
+      <div id="progress" hidden><div class="stages" id="stages"></div><div class="bar"><div id="barFill"></div></div><div id="progressMsg" class="muted"></div></div>
+      <div id="ask" hidden></div>
+      <div id="qa" hidden></div>
+    </div>
+  </section>
+
+  <aside id="right">
+    <nav class="tabs" data-group="right">
+      <button data-tab="history" class="active">Edit history</button>
+      <button data-tab="provenance">Provenance</button>
+      <button data-tab="calls">Model calls</button>
+    </nav>
+    <section data-panel="history" class="panel active"><div id="history"></div></section>
+    <section data-panel="provenance" class="panel">
+      <div id="verify"></div>
+      <a id="provDownload" class="btn" href="#" download>Download signed log (JSONL)</a>
+      <div id="provList"></div>
+    </section>
+    <section data-panel="calls" class="panel"><div id="calls"></div></section>
+  </aside>
+</main>
+<footer>Archived street-camera footage from the VAST VSS index · edited outputs are labeled and logged · hackathon-grade: temporal fill is approximate, masks are box-based on CPU.</footer>
+<script src="static/app.js"></script>
+</body>
+</html>
