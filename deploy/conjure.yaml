@@ -1,5 +1,15 @@
-# Conjure on the workshop cluster: code from ConfigMap conjure-code, credentials from Secret conjure-creds.
+# Conjure on the workshop cluster: code from ConfigMap conjure-code, credentials from Secret conjure-creds,
+# clips/edits/provenance on a VAST-backed PersistentVolumeClaim.
 # Apply with: sed "s/__APP_HOST__/$APP_HOST/" deploy/conjure.yaml | kubectl -n "$NS" apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: conjure-data
+  labels: {app: conjure}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 15Gi}}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,9 +32,15 @@ spec:
         command: ["bash", "-c"]
         args:
         - |
-          set -euo pipefail
+          set -uo pipefail
           pip install -q --cache-dir /data/pip-cache -r requirements.txt
-          exec python main.py
+          # deploy/update.sh restarts only this process, so the pod and its volume stay put.
+          while true; do
+            python main.py & echo $! > /tmp/conjure.pid
+            wait $!
+            echo "conjure process exited; restarting"
+            sleep 1
+          done
         ports:
         - containerPort: 8080
         env:
@@ -63,7 +79,7 @@ spec:
       - name: code
         configMap: {name: conjure-code}
       - name: data
-        emptyDir: {sizeLimit: 12Gi}
+        persistentVolumeClaim: {claimName: conjure-data}
 ---
 apiVersion: v1
 kind: Service

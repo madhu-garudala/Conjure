@@ -26,7 +26,8 @@ REAL_HEIGHT_M = {
 }
 PROPS = ("traffic_cone", "barrier", "bollard")
 HARVEST = ("person", "car", "truck", "bus", "bicycle")
-HARVEST_VERSION = 3
+HARVEST_VERSION = 4
+ASPECT = {"person": (0.22, 0.7), "bicycle": (0.8, 2.6), "car": (0.8, 3.4), "truck": (0.7, 3.8), "bus": (0.8, 5.0)}
 
 
 def _shade(img, alpha):
@@ -171,6 +172,9 @@ def _best_cutout(track, frames, tracks, plate, width, height):
         x1, y1, x2, y2 = track["boxes"][offset]
         bw, bh = x2 - x1, y2 - y1
         if bh < 70 or x1 <= 2 or y1 <= 2 or x2 >= width - 3 or y2 >= height - 3:
+            continue
+        low, high = ASPECT.get(track["label"], (0.2, 5.0))
+        if not low <= bw / bh <= high:
             continue
         is_vehicle = tracker.family(track["label"]) == "vehicle"
         crowded = False

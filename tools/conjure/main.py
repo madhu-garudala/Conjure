@@ -1,5 +1,7 @@
 """Conjure: plain-English video object editing with a signed provenance log."""
 
+import json
+import logging
 import os
 import subprocess
 import threading
@@ -19,6 +21,7 @@ import tracing
 import video
 import vss
 
+logging.getLogger("werkzeug").addFilter(lambda record: "/health" not in record.getMessage())
 HERE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
@@ -218,7 +221,8 @@ def search():
         source = row.get("source")
         if not source:
             continue
-        classes = row.get("object_classes") or []
+        classes = _as_json(row.get("object_classes"), [])
+        counts = _as_json(row.get("object_counts"), {})
         if wanted and wanted not in classes:
             continue
         _rows[source] = row
@@ -228,11 +232,21 @@ def search():
             "caption": (row.get("reasoning_content") or "")[:400],
             "segment": [row.get("segment_start_sec"), row.get("segment_end_sec")],
             "similarity": row.get("similarity_score"), "object_classes": classes,
-            "object_counts": row.get("object_counts") or {},
+            "object_counts": counts if isinstance(counts, dict) else {},
             "thumb_url": f"search_thumb/{clip_id}.jpg?{urlencode({'source': source})}",
             "loaded": (store.meta(clip_id) or {}).get("status") == "ready",
         })
     return jsonify({"results": results[:24], "query": query, "filter": wanted})
+
+
+def _as_json(value, default):
+    """VSS returns object_counts as a JSON string and object_classes as 'a,b,c'."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return [v.strip() for v in value.split(",") if v.strip()] if isinstance(default, list) else default
+    return value if value is not None else default
 
 
 @app.get("/search_thumb/<clip_id>.jpg")
@@ -248,10 +262,20 @@ def search_thumb(clip_id):
                     subprocess.run(
                         [video.ffmpeg_bin(), "-v", "quiet", "-y", "-ss", "1.0", "-i", vss.stream_url(source),
                          "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "5", out],
-                        capture_output=True, timeout=60,
+                        capture_output=True, timeout=45,
                     )
                 except Exception:
                     pass
+            if not os.path.exists(out):
+                tmp = os.path.join(SEARCH_THUMBS, f"{clip_id}.part.mp4")
+                try:
+                    vss.download(source, tmp)
+                    video.thumbnail(tmp, out, at=1.0)
+                except Exception:
+                    pass
+                finally:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
     if not os.path.exists(out):
         abort(404)
     return send_file(out, mimetype="image/jpeg", max_age=3600)

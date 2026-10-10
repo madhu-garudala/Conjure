@@ -78,9 +78,10 @@ def _feather(shape, rect, radius):
 def _in_front_mask(scene, frame_index, frame, plate_crop, ox, oy, w, h, ref_bottom, exclude, target_box=None):
     """Foreground pixels of other moving objects that must survive the edit.
 
-    Objects closer to the camera (feet lower than ref_bottom) keep all their pixels. Objects beside or
-    behind the target keep the pixels nearer their own box centre than the target's, so a companion
-    walking next to a removed person is not erased with them.
+    Objects closer to the camera (feet lower than ref_bottom) keep all their pixels. Objects clearly
+    behind the target are hidden by it inside its box, so they keep only pixels outside that box.
+    Objects beside the target keep the pixels nearer their own box centre than the target's, so a
+    companion walking next to a removed person is not erased with them.
     """
     protect = np.zeros((h, w), np.float32)
     for other in scene.tracks:
@@ -99,7 +100,12 @@ def _in_front_mask(scene, frame_index, frame, plate_crop, ox, oy, w, h, ref_bott
         diff = np.abs(frame[y1:y2, x1:x2].astype(np.int16) - plate_crop[y1:y2, x1:x2].astype(np.int16)).max(axis=2)
         fg = (diff > 30).astype(np.uint8)
         fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-        if not in_front:
+        if not in_front and box[3] < ref_bottom - 0.08 * max(1, target_box[3] - target_box[1]):
+            px, py = 0.06 * (target_box[2] - target_box[0]), 0.06 * (target_box[3] - target_box[1])
+            tx1, ty1 = max(int(target_box[0] - px) - ox - x1, 0), max(int(target_box[1] - py) - oy - y1, 0)
+            tx2, ty2 = max(int(target_box[2] + px) - ox - x1, 0), max(int(target_box[3] + py) - oy - y1, 0)
+            fg[ty1:ty2, tx1:tx2] = 0
+        elif not in_front:
             xs = np.arange(x1, x2, dtype=np.float32)[None, :] + ox
             ocx, ow = (box[0] + box[2]) / 2, max(1.0, box[2] - box[0])
             tcx, tw = (target_box[0] + target_box[2]) / 2, max(1.0, target_box[2] - target_box[0])
@@ -159,12 +165,14 @@ def _remove_one(scene, frames, track, exclude):
         rect = _pad(box, scene.width, scene.height)
         bw, bh = rect[2] - rect[0], rect[3] - rect[1]
         margin = int(max(6, 0.1 * min(bw, bh)))
-        ox, oy = max(0, rect[0] - margin), max(0, rect[1] - margin)
-        ex, ey = min(scene.width, rect[2] + margin), min(scene.height, rect[3] + margin)
+        reach = margin + int(0.12 * max(bw, bh))
+        ox, oy = max(0, rect[0] - reach), max(0, rect[1] - reach)
+        ex, ey = min(scene.width, rect[2] + reach), min(scene.height, rect[3] + reach)
         w, h = ex - ox, ey - oy
         crop = frames[index, oy:ey, ox:ex]
         plate_crop = scene.plate_crop(filled, index, ox, oy, w, h).astype(np.float32)
         alpha = _feather((h, w), (rect[0] - ox, rect[1] - oy, rect[2] - ox, rect[3] - oy), margin)
+        alpha = np.maximum(alpha, _spill(scene.v0[index, oy:ey, ox:ex], plate_crop, alpha))
         ring = (alpha < 0.02)
         if ring.sum() > 50:
             src = scene.v0[index, oy:ey, ox:ex][ring].astype(np.float32)
@@ -177,6 +185,21 @@ def _remove_one(scene, frames, track, exclude):
         a = alpha[:, :, None]
         frames[index, oy:ey, ox:ex] = (crop.astype(np.float32) * (1 - a) + plate_crop * a).astype(np.uint8)
     return {"editor": "temporal-clean-plate" + ("" if info["temporal"] else "+telea"), **info}
+
+
+def _spill(frame_crop, plate_crop, alpha):
+    """Foreground connected to the box but outside it (limbs, shadow, an under-sized detection)."""
+    diff = np.abs(frame_crop.astype(np.int16) - plate_crop.astype(np.int16)).max(axis=2)
+    fg = cv2.morphologyEx((diff > 30).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    core = alpha > 0.5
+    count, labels = cv2.connectedComponents(fg)
+    touching = np.unique(labels[core & (fg > 0)])
+    grow = np.isin(labels, touching[touching > 0]) & ~core
+    if not grow.any() or grow.sum() > 0.35 * max(1, (~core).sum()):
+        return np.zeros_like(alpha)
+    grow = cv2.dilate(grow.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(np.float32)
+    return cv2.GaussianBlur(grow, (0, 0), 2.0)
 
 
 def _blur_region(crop, mask, block):

@@ -397,7 +397,7 @@ def _place(scene, intent, anchor, excluded):
 
 
 def _describe(action, intent, picked):
-    label = intent.get("object_class") or "object"
+    label = " ".join([*(intent.get("attributes") or []), intent.get("object_class") or "object"])
     if action == "anonymize":
         return "anonymized faces and plates"
     if action == "add":

@@ -47,7 +47,8 @@ COLORS = ("red", "orange", "yellow", "green", "blue", "purple", "pink", "white",
 
 AUTHORITY = r"(police|cops?|court|judge|jury|insurance|insurer|investigat\w*|prosecut\w*|detective|authorit\w*|officer|lawyer|attorney)"
 INTENT = (r"(fool|trick|deceiv\w*|mislead\w*|hide|conceal|fake|cover\s*up|frame|tamper\w*|\blie\b|"
-          r"so\s+(?:that\s+)?(?:they|nobody|no\s+one)|can'?t\s+prove|cannot\s+prove|won'?t\s+(?:know|find|see|notice)|"
+          r"so\s+(?:that\s+)?(?:they|nobody|no\s+one)|(?:can'?t|cannot|won'?t\s+be\s+able\s+to)\s+(?:prove|identify|tell|trace|find|see)|"
+          r"won'?t\s+(?:know|find|see|notice)|before\s+(?:the\s+)?\w+\s+(?:sees?|gets?|reviews?|watch\w*)|"
           r"never\s+(?:know|find)|get\s+away|avoid\s+(?:the\s+|a\s+)?(?:ticket|fine|charges?|liability|blame|claim)|"
           r"pretend|without\s+(?:them|anyone|anybody)\s+knowing|no\s+one\s+will\s+know)")
 PHRASES = r"(fake\s+evidence|fabricat\w*\s+evidence|tamper\w*\s+with\s+evidence|destroy\w*\s+evidence|doctor\w*\s+(?:the\s+)?evidence|frame\s+(?:him|her|them|someone|somebody)|false\s+alibi|alibi)"
@@ -223,7 +224,7 @@ def _color_score(frame, box, color):
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV).reshape(-1, 3).astype(np.int32)
     hue, sat, val = hsv[:, 0], hsv[:, 1], hsv[:, 2]
     colored = (sat > 80) & (val > 60)
-    ranges = {"red": ((hue < 8) | (hue > 170)), "orange": (hue >= 8) & (hue < 20), "yellow": (hue >= 20) & (hue < 34),
+    ranges = {"red": ((hue < 6) | (hue > 170)), "orange": (hue >= 5) & (hue < 17), "yellow": (hue >= 12) & (hue < 34),
               "green": (hue >= 34) & (hue < 85), "blue": (hue >= 90) & (hue < 130), "purple": (hue >= 130) & (hue < 155),
               "pink": (hue >= 155) & (hue <= 170), "brown": (hue >= 8) & (hue < 20) & (val < 150)}
     if color == "white":

@@ -1,5 +1,6 @@
 :root { --bg:#0e1116; --panel:#161b22; --line:#2a313c; --text:#e6edf3; --muted:#8b949e; --accent:#c792ea; --accent2:#5fd4ff; --ok:#3fb950; --bad:#f85149; --warn:#d29922; }
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
 header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 18px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#1a1430,#0e1116 60%); }
 .brand { font-size:20px; font-weight:700; letter-spacing:.3px; }
@@ -46,7 +47,8 @@ input:focus { outline:none; border-color:var(--accent); }
 .clipbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
 .modes button { font-size:12px; }
 .modes button.active { border-color:var(--accent2); color:var(--accent2); }
-.viewer { position:relative; background:#000; border-radius:8px; overflow:hidden; user-select:none; }
+.viewer { position:relative; background:#000; border-radius:8px; overflow:hidden; user-select:none; max-width:calc((100vh - 400px) * 16 / 9); margin:0 auto; }
+.viewer.sbs { max-width:calc((100vh - 400px) * 32 / 9); }
 .viewer .pane { position:relative; }
 .viewer video { width:100%; display:block; }
 .viewer.slider .pane.after { position:absolute; inset:0; }

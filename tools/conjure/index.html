@@ -77,6 +77,9 @@
         <input id="cmdInput" placeholder='Describe your edit — "remove the person on the left", "replace the truck with a bus", "add a traffic cone on the right"' autocomplete="off">
         <button type="submit" class="primary">Conjure</button>
       </form>
+      <div id="progress" hidden><div class="stages" id="stages"></div><div class="bar"><div id="barFill"></div></div><div id="progressMsg" class="muted"></div></div>
+      <div id="ask" hidden></div>
+      <div id="qa" hidden></div>
       <div class="toolbar">
         <div class="chips" id="cmdChips"></div>
         <div class="tools">
@@ -86,9 +89,6 @@
         </div>
       </div>
       <p class="hint">Or click any boxed object in the video to remove, blur or replace it. Edits use the moment you are paused on.</p>
-      <div id="progress" hidden><div class="stages" id="stages"></div><div class="bar"><div id="barFill"></div></div><div id="progressMsg" class="muted"></div></div>
-      <div id="ask" hidden></div>
-      <div id="qa" hidden></div>
     </div>
   </section>
 
