@@ -97,6 +97,20 @@ shows the original on the left and the edit on the right. The Cosmos3-Reason bli
 the result 0.3 against 1 for the unedited original and flagged "new artifacts likely", which is the
 dense-crowd limit described under "Honesty notes and limits".*
 
+![Side by side: the original crosswalk and the same frame with the crowd removed](docs/screenshots/15_remove_everyone_side_by_side.jpg)
+
+*The same edit side by side at frame 41: the original on the left, the crowd removed from the
+crosswalk on the right. The full Cosmos3-Reason review is shown under the command, including the
+ghosting it found.*
+
+![Provenance for the edit: verified chain, 38 track ids, models and hashes](docs/screenshots/16_remove_everyone_provenance.jpg)
+
+*The proof that the edit is what it says it is. The Provenance tab verified the log (hash chain,
+HMAC-SHA256 signatures and artifact hashes) and shows entry #1: the command, the 38 person track
+ids resolved by `nl_detection`, frames 0 to 149, the models used (YOLO11 detections from the VSS
+sidecar, the clean-plate segmenter and editor, Llama-3.3-70B as parser, Cosmos3 nano reasoner as
+reviewer) and the sha256 of the input and output video files. The signed log downloads as JSONL.*
+
 ### The editor at a glance
 
 - **Left panel:** `Clips` (prepared clips with their Cosmos caption and current version), `Search`
