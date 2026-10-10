@@ -1,5 +1,7 @@
 # Conjure
 
+*Conjure it in. Conjure it away. Conjure it up.*
+
 Conjure is an AI video editing agent for real street footage. You type a plain-English command
 ("remove the person on the left", "replace the yellow taxi with a car", "add a traffic cone in the
 middle of the crosswalk") or click an object, and Conjure tracks it across every frame and edits it.
@@ -8,9 +10,15 @@ is written to a hash-chained, HMAC-signed provenance log.
 
 > **Conjure never silently alters footage. Every output carries a verifiable record of what was changed.**
 
-Live app: open <https://workshop.thecosmoslabs.com> and click the **App** button (team-1, Ingress path `/app`).
+Built and deployed on the VAST Builders Challenge workshop cluster (namespace `team-1`, Ingress path `/app`).
 
 ![Remove: before (left) and after (right)](docs/before_after/remove.gif)
+
+## Hackathon
+
+- **Event:** https://luma.com/vastnyc
+- **Hackathon helper scripts and documentation:** https://github.com/vast-data/vast-builders-challenge#vast-builders-challenge-video-agents
+- **Sister project on the same infrastructure:** [SafeRoute](https://github.com/madhu-garudala/SafeRoute), AI evacuation routing from real street cameras
 
 ## Preflight checklist (filled in on build day)
 
@@ -50,7 +58,7 @@ All of these run on the deployed app and are shown in `docs/`.
 | # | Feature | What it does |
 |---|---------|--------------|
 | 1 | **Remove** | Erases a tracked object from every frame it appears in. Carried items (bags, umbrellas) go with the person. People walking beside or in front of the target are protected. |
-| 2 | **Track-and-edit** | YOLO11 boxes on every frame are linked into tracks, so one command edits the object for its whole time on screen. |
+| 2 | **Track-and-edit** | YOLO11 boxes on every frame are linked into tracks, so one command edits the object for its whole time on screen. Commands that name a whole class ("remove everyone from the video") edit every matching track as one group, in one version with one provenance entry. |
 | 3 | **Natural-language targeting + click select** | Llama-3.3-70B parses the command into strict JSON (action, class, color, position, quantity), which Conjure checks against the detected objects. Ambiguous commands ("remove the car" with 3 cars) return a candidate picker with thumbnails. Clicking an object on the video opens a remove / blur / replace popover. |
 | 4 | **Before/after viewer** | A drag slider, side-by-side, or edited-only view, all kept in sync. |
 | 5 | **Signed provenance log** | One JSONL entry per edit, ingest, revert, and refusal. Each entry has input/output sha256 hashes, the previous entry's hash, and an HMAC-SHA256 signature with a key from a Kubernetes Secret. The UI verifies the chain and the artifact hashes. |
@@ -78,6 +86,29 @@ Before/after frame pairs (left original, right Conjure output; each row is a dif
 | Anonymize | one click | [docs/before_after/anonymize.jpg](docs/before_after/anonymize.jpg) |
 
 ![Replace the yellow taxi with a car](docs/before_after/replace.jpg)
+
+### One command, a whole crowd
+
+!["remove everyone from the video": 38 people removed in one edit](docs/screenshots/14_remove_everyone.jpg)
+
+*"remove everyone from the video" on a 5 s crosswalk clip with 41 tracked objects. Conjure removed
+38 people as one group and wrote version v1 with a single signed provenance entry. The slider
+shows the original on the left and the edit on the right. The Cosmos3-Reason blind review scored
+the result 0.3 against 1 for the unedited original and flagged "new artifacts likely", which is the
+dense-crowd limit described under "Honesty notes and limits".*
+
+### The editor at a glance
+
+- **Left panel:** `Clips` (prepared clips with their Cosmos caption and current version), `Search`
+  (object search over the VSS archive) and `Library` (the sprite library used by Add and Replace).
+- **Center:** the viewer with three modes (before/after slider, side by side, edited only), a
+  frame-accurate scrubber, a toggle for the tracked detection boxes, and the command box. The
+  result line under it reports what changed, the new version, the provenance entry and the
+  Cosmos review.
+- **Right panel:** `Edit history` (every version with its sha256, QA score, compare and revert),
+  `Provenance` (the verified log) and `Model calls` (Weave-traced calls).
+- The header carries the provenance promise and the footer states that the footage is archived,
+  that outputs are labeled and logged, and that the fill is hackathon-grade.
 
 UI screenshots, captured from the deployed app with headless Chrome (`scripts/capture_screens.mjs`):
 
@@ -227,6 +258,20 @@ Example entry (from the taxi clip):
 | ffmpeg (imageio-ffmpeg) | decode, encode (H.264, faststart), thumbnails |
 | Flask | API and single-page UI |
 | Kubernetes (ConfigMap, Secret, PVC, Deployment, Ingress) | deployment on the workshop cluster |
+
+## Repository
+
+| Path | Contents |
+|------|----------|
+| [tools/conjure/](tools/conjure/) | The app: Flask backend and single-page UI in one flat folder (mounted as a ConfigMap) |
+| [tools/conjure/README.md](tools/conjure/README.md) | Modules, API, environment variable names, run and deploy details |
+| [deploy/](deploy/) | Kubernetes manifest and the in-place code update script |
+| [scripts/capture_screens.mjs](scripts/capture_screens.mjs) | Headless-Chrome script that captured the UI screenshots |
+| [docs/before_after/](docs/before_after/) | Before/after frame pairs and the removal GIF |
+| [docs/screenshots/](docs/screenshots/) | UI screenshots of the deployed app |
+| [docs/provenance/](docs/provenance/) | Full signed provenance logs exported from two clips |
+| [conjure_feature_list.md](conjure_feature_list.md) | The original feature spec and build plan |
+| [helper_context.md](helper_context.md) | Infrastructure notes carried over from SafeRoute for the build agent |
 
 ## Quick start (deploy)
 
