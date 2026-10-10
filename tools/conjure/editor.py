@@ -146,18 +146,23 @@ def attached_items(scene, track):
 
 def remove(scene, frames, track):
     """Replace the track's pixels (and anything it carries) with the clean plate in every frame."""
-    items = attached_items(scene, track)
-    exclude = {track["id"], *(i["id"] for i in items)}
-    info = _remove_one(scene, frames, track, exclude)
-    for item in items:
-        _remove_one(scene, frames, item, exclude)
-    info["carried_items_removed"] = [f"{i['label']} #{i['id']}" for i in items]
-    info["carried_track_ids"] = [i["id"] for i in items]
-    return info
+    return remove_group(scene, frames, [track])[0]
 
 
-def _remove_one(scene, frames, track, exclude):
-    filled, info = plates.fill_for_target(scene.plate, scene.holes, scene.v0, track, scene.affines, scene.static)
+def remove_group(scene, frames, tracks):
+    """Remove several tracks together so they never protect each other and share one background fill."""
+    carried = {t["id"]: attached_items(scene, t) for t in tracks}
+    group = list({t["id"]: t for t in tracks + [i for items in carried.values() for i in items]}.values())
+    exclude = {t["id"] for t in group}
+    filled, fill = plates.fill_for_target(scene.plate, scene.holes, scene.v0, group, scene.affines, scene.static)
+    for t in group:
+        _remove_one(scene, frames, t, exclude, filled)
+    info = {"editor": "temporal-clean-plate" + ("" if fill["temporal"] else "+telea"), **fill}
+    return [{**info, "carried_items_removed": [f"{i['label']} #{i['id']}" for i in carried[t["id"]]],
+             "carried_track_ids": [i["id"] for i in carried[t["id"]]]} for t in tracks]
+
+
+def _remove_one(scene, frames, track, exclude, filled):
     for offset, box in enumerate(track["boxes"]):
         index = track["first"] + offset
         if index >= len(frames):
@@ -174,6 +179,7 @@ def _remove_one(scene, frames, track, exclude):
         alpha = _feather((h, w), (rect[0] - ox, rect[1] - oy, rect[2] - ox, rect[3] - oy), margin)
         alpha = np.maximum(alpha, _spill(scene.v0[index, oy:ey, ox:ex], plate_crop, alpha))
         ring = (alpha < 0.02)
+        ring &= np.abs(scene.v0[index, oy:ey, ox:ex].astype(np.float32) - plate_crop).max(axis=2) < 40
         if ring.sum() > 50:
             src = scene.v0[index, oy:ey, ox:ex][ring].astype(np.float32)
             ref = plate_crop[ring]
@@ -184,7 +190,6 @@ def _remove_one(scene, frames, track, exclude):
         alpha = alpha * (1.0 - protect)
         a = alpha[:, :, None]
         frames[index, oy:ey, ox:ex] = (crop.astype(np.float32) * (1 - a) + plate_crop * a).astype(np.uint8)
-    return {"editor": "temporal-clean-plate" + ("" if info["temporal"] else "+telea"), **info}
 
 
 def _spill(frame_crop, plate_crop, alpha):

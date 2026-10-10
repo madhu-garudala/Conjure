@@ -99,8 +99,8 @@ def prepare(job, source=None, upload_path=None, row=None):
 
     job.enter("clean plate")
     plate, holes = plates.build_plate(frames, tracks, affines, static, progress=job.progress)
-    cv2.imwrite(os.path.join(folder, "plate.png"), plate)
-    np.save(os.path.join(folder, "holes.npy"), holes)
+    _save_plate(folder, plate, holes)
+    meta["plate_v"] = plates.PLATE_VERSION
     meta["plate_hole_pct"] = round(float(holes.mean()) * 100, 2)
 
     job.enter("sprites")
@@ -132,10 +132,31 @@ def prepare(job, source=None, upload_path=None, row=None):
     return {"clip_id": clip_id, "provenance_entry": entry}
 
 
+def _save_plate(folder, plate, holes):
+    cv2.imwrite(os.path.join(folder, "plate.tmp.png"), plate)
+    np.save(os.path.join(folder, "holes.tmp.npy"), holes)
+    os.replace(os.path.join(folder, "plate.tmp.png"), os.path.join(folder, "plate.png"))
+    os.replace(os.path.join(folder, "holes.tmp.npy"), os.path.join(folder, "holes.npy"))
+
+
 def reharvest_stale():
-    """Re-cut library sprites for clips prepared by an older harvester."""
+    """Rebuild clean plates and re-cut library sprites for clips prepared by older code."""
     for meta in store.list_clips():
-        if meta.get("status") != "ready" or meta.get("sprites_v") == sprites.HARVEST_VERSION:
+        if meta.get("status") != "ready":
+            continue
+        if meta.get("plate_v") != plates.PLATE_VERSION:
+            try:
+                scene = load_scene(meta["clip_id"])
+                plate, holes = plates.build_plate(scene.v0, scene.tracks, scene.affines, scene.static)
+                _save_plate(store.clip_dir(meta["clip_id"]), plate, holes)
+                meta["plate_v"] = plates.PLATE_VERSION
+                meta["sprites_v"] = None
+                store.save_meta(meta["clip_id"], meta)
+                del scene
+            except Exception as exc:
+                print(f"plate rebuild failed for {meta['clip_id']}: {type(exc).__name__}", flush=True)
+                continue
+        if meta.get("sprites_v") == sprites.HARVEST_VERSION:
             continue
         try:
             scene = load_scene(meta["clip_id"])
@@ -284,16 +305,17 @@ def edit(job, req):
         details.append(editor.add_static(scene, frames, item, cx, bottom))
         details[-1]["sprite"] = item["name"]
     else:
+        removed = editor.remove_group(scene, frames, picked) if action in ("remove", "replace") else []
+        for info in removed:
+            new_excluded.update(info["carried_track_ids"])
         for i, track in enumerate(picked):
             if action == "remove":
-                details.append(editor.remove(scene, frames, track))
+                details.append(removed[i])
                 new_excluded.add(track["id"])
-                new_excluded.update(details[-1]["carried_track_ids"])
             elif action == "blur":
                 details.append(editor.blur(scene, frames, track))
             elif action == "replace":
-                details.append(editor.remove(scene, frames, track))
-                new_excluded.update(details[-1]["carried_track_ids"])
+                details.append(removed[i])
                 boxes = np.array(track["boxes"], dtype=np.float64)
                 aspect = float(np.median((boxes[:, 2] - boxes[:, 0]) / np.maximum(boxes[:, 3] - boxes[:, 1], 1)))
                 item = sprites.pick(intent["new_object"], clip_id, aspect=aspect)

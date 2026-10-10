@@ -115,6 +115,20 @@ def masked_median(stack, valid):
     return median.astype(np.uint8), count
 
 
+PLATE_VERSION = 2
+
+
+def unreliable(stack, valid, total):
+    """Pixels seen clean in few frames whose clean samples disagree (undetected passers-by, not background)."""
+    count = valid.sum(axis=0)
+    lum = stack.astype(np.float32) @ np.array([0.114, 0.587, 0.299], np.float32)
+    lum = np.where(valid, lum, 0.0)
+    n = np.maximum(count, 1)
+    mean = lum.sum(axis=0) / n
+    spread = np.sqrt(np.maximum((lum ** 2).sum(axis=0) / n - mean ** 2, 0))
+    return (count > 0) & (count < 0.45 * total) & (spread > 14)
+
+
 def build_plate(frames, tracks, affines, static, progress=None):
     count, height, width, _ = frames.shape
     ref_frames, seen = to_reference(frames, affines, static)
@@ -123,10 +137,12 @@ def build_plate(frames, tracks, affines, static, progress=None):
         occ |= ~seen
     plate = np.zeros((height, width, 3), np.uint8)
     holes = np.zeros((height, width), bool)
+    doubtful = np.zeros((height, width), bool)
     step = 48
     for y0 in range(0, height, step):
         y1 = min(height, y0 + step)
         median, seen_count = masked_median(ref_frames[:, y0:y1], ~occ[:, y0:y1])
+        doubtful[y0:y1] = unreliable(ref_frames[:, y0:y1], ~occ[:, y0:y1], count)
         hole = seen_count == 0
         if hole.any():
             fallback = np.median(ref_frames[:, y0:y1], axis=0).astype(np.uint8)
@@ -135,6 +151,9 @@ def build_plate(frames, tracks, affines, static, progress=None):
         holes[y0:y1] = hole
         if progress:
             progress(y1 / height)
+    if doubtful.any():
+        mask = cv2.dilate(doubtful.astype(np.uint8) * 255, np.ones((5, 5), np.uint8))
+        plate = cv2.inpaint(plate, mask, 5, cv2.INPAINT_TELEA)
     return plate, holes
 
 
@@ -148,10 +167,11 @@ def plate_view(plate, matrix, static, x, y, w, h):
                           borderMode=cv2.BORDER_REPLICATE)
 
 
-def fill_for_target(plate, holes, frames, target, affines, static):
-    """Fill plate pixels the global plate never saw clean, using frames where only the target is absent."""
+def fill_for_target(plate, holes, frames, targets, affines, static):
+    """Fill plate pixels the global plate never saw clean, using frames where none of the targets is present."""
     count, height, width, _ = frames.shape
-    region = occupancy([target], count, height, width, affines, static, pad=10, only={target["id"]})
+    targets = targets if isinstance(targets, list) else [targets]
+    region = occupancy(targets, count, height, width, affines, static, pad=10, only={t["id"] for t in targets})
     footprint = region.any(axis=0)
     need = holes & footprint
     if not need.any():

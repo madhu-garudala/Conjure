@@ -203,6 +203,9 @@ Example entry (from the taxi clip):
   cameras with moving targets. Parked objects fall back to Telea, which looks smeared.
 - **Removal artifacts:** where two people overlap, a faint ghost strip can remain. Background
   objects hidden behind a removed object cannot be reconstructed, so they show the plate there.
+- **Dense crowds:** in a crosswalk that is never empty, the background is never seen clean. Pixels
+  whose few "clean" samples disagree are inpainted, so "remove everyone" leaves a soft gray smudge
+  there instead of ghost legs. People YOLO never detects are not removed.
 - **Replace and Add use 2D sprites.** They have shadows and scale but no 3D pose. There are no
   truck or bus cutouts in the current library.
 - **The Cosmos QA score is noisy.** It is shown next to a baseline score of the unedited clip, as a
