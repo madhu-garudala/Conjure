@@ -1,5 +1,10 @@
 # Conjure: infrastructure and workflow context for the build agent
 
+> **Status:** this was the briefing written before the build. What preflight actually found (no
+> schedulable GPU, YOLO boxes available, `/app` reused) is recorded in the
+> [README](README.md#build-day-preflight-results). Items marked UNVERIFIED below reflect what was
+> known beforehand.
+
 **Read this before `conjure_feature_list.md`.** That file says *what* to build. This file says
 *where* you are building it and what we learned the hard way building the previous project
 (SafeRoute) on the same infrastructure on 2026-10-09.

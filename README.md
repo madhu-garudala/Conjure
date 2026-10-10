@@ -20,36 +20,22 @@ Built and deployed on the VAST Builders Challenge workshop cluster (namespace `t
 - **Hackathon helper scripts and documentation:** https://github.com/vast-data/vast-builders-challenge#vast-builders-challenge-video-agents
 - **Sister project on the same infrastructure:** [SafeRoute](https://github.com/madhu-garudala/SafeRoute), AI evacuation routing from real street cameras
 
-## Preflight checklist (filled in on build day)
+## Model set
 
-```text
-[x] Team / namespace:                            team-1
-[x] SafeRoute still deployed at /app?            yes at start; replaced by Conjure (SafeRoute Ingress
-                                                 removed, deployment scaled to 0, ConfigMap + Secret kept)
-[x] Secret saferoute-vss-creds present, keys:    GPU_BEARER_TOKEN, VSS_PASSWORD, VSS_USERNAME,
-                                                 WANDB_API_KEY, WANDB_PROJECT, WANDB_TEAM
-                                                 (copied into conjure-creds, which adds VSS_URL,
-                                                 COSMOS3_REASON_URL, YOLO_URL, CONJURE_SIGNING_KEY)
-[x] VSS login + search + stream from a pod:      ok
-[x] Cosmos endpoint, model id:                   nvidia/cosmos3-nano-reasoner
-[x] YOLO endpoint returns boxes?                 yes (per-frame xyxy boxes, class, confidence; the VSS
-                                                 detections sidecar returns the same and is used first)
-[x] GPU schedulable in the namespace?            no (every node reports insufficient nvidia.com/gpu)
-[x] torch installs on python:3.12-slim?          not used; the pipeline is NumPy + OpenCV on CPU
-[x] Weights download from the pod?               not needed (no local model weights)
-[x] W&B inference model used:                    meta-llama/Llama-3.3-70B-Instruct (fallback 3.1-8B)
-[x] Weave init from the pod:                     ok
-[x] git push from the VM works:                  yes over HTTPS (SSH key not authorized)
-[x] Conjure URL (path chosen):                   /app, opened via the workshop App button
-[x] Final model set:                             detector YOLO11 / segmenter clean-plate difference mask
-                                                 inside the YOLO box / tracker IoU tracker with gap
-                                                 interpolation / inpainter temporal clean plate
-                                                 (Telea fallback); NL parser Llama-3.3-70B;
-                                                 reviewer Cosmos3 nano reasoner
-```
+No GPU could be scheduled in the workshop namespace, so SAM2, ProPainter and LaMa were not used.
+Conjure runs a CPU pipeline that works well on fixed street cameras:
 
-Because no GPU could be scheduled, SAM2, ProPainter and LaMa were not used. Conjure uses a CPU
-pipeline that works well on fixed street cameras (see "How removal works" and "Limits").
+| Stage | What runs |
+|-------|-----------|
+| Detector | YOLO11 (per-frame boxes from the VSS detections sidecar, hosted endpoint as fallback) |
+| Tracker | IoU tracker with gap interpolation and smoothing |
+| Segmenter | Clean-plate difference mask inside the YOLO box |
+| Inpainter | Temporal clean plate, OpenCV Telea as fallback |
+| Command parser | Llama-3.3-70B-Instruct on W&B Inference (rule-based fallback) |
+| Reviewer | NVIDIA Cosmos3 nano reasoner (blind quality review) |
+
+See "How removal works" and "Honesty notes and limits" below, and the build-day preflight results
+near the end.
 
 ## What works
 
@@ -259,6 +245,36 @@ Example entry (from the taxi clip):
   falls back to the candidate picker.
 - **Clips are trimmed** to 15 s and processed at 1280x720.
 
+## Build-day preflight results
+
+What the workshop environment could and could not do, checked before any app code was written:
+
+```text
+[x] Team / namespace:                            team-1
+[x] SafeRoute still deployed at /app?            yes at start; replaced by Conjure (SafeRoute Ingress
+                                                 removed, deployment scaled to 0, ConfigMap + Secret kept)
+[x] Secret saferoute-vss-creds present, keys:    GPU_BEARER_TOKEN, VSS_PASSWORD, VSS_USERNAME,
+                                                 WANDB_API_KEY, WANDB_PROJECT, WANDB_TEAM
+                                                 (copied into conjure-creds, which adds VSS_URL,
+                                                 COSMOS3_REASON_URL, YOLO_URL, CONJURE_SIGNING_KEY)
+[x] VSS login + search + stream from a pod:      ok
+[x] Cosmos endpoint, model id:                   nvidia/cosmos3-nano-reasoner
+[x] YOLO endpoint returns boxes?                 yes (per-frame xyxy boxes, class, confidence; the VSS
+                                                 detections sidecar returns the same and is used first)
+[x] GPU schedulable in the namespace?            no (every node reports insufficient nvidia.com/gpu)
+[x] torch installs on python:3.12-slim?          not used; the pipeline is NumPy + OpenCV on CPU
+[x] Weights download from the pod?               not needed (no local model weights)
+[x] W&B inference model used:                    meta-llama/Llama-3.3-70B-Instruct (fallback 3.1-8B)
+[x] Weave init from the pod:                     ok
+[x] git push from the VM works:                  yes over HTTPS (SSH key not authorized)
+[x] Conjure URL (path chosen):                   /app, opened via the workshop App button
+[x] Final model set:                             detector YOLO11 / segmenter clean-plate difference mask
+                                                 inside the YOLO box / tracker IoU tracker with gap
+                                                 interpolation / inpainter temporal clean plate
+                                                 (Telea fallback); NL parser Llama-3.3-70B;
+                                                 reviewer Cosmos3 nano reasoner
+```
+
 ## Built with
 
 | Component | Use |
@@ -291,6 +307,7 @@ Example entry (from the taxi clip):
 
 ```bash
 export NS=team-1 KUBECONFIG=/config/team-1-k8s.yaml
+export APP_HOST=video-lab-team-1.cosmos.vastdata.com   # the team's Ingress host
 # Secret conjure-creds must hold the keys listed in the preflight checklist (never commit values).
 kubectl -n "$NS" create configmap conjure-code --from-file=tools/conjure/ --dry-run=client -o yaml | kubectl -n "$NS" apply -f -
 sed "s/__APP_HOST__/$APP_HOST/" deploy/conjure.yaml | kubectl -n "$NS" apply -f -
